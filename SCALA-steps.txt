@@ -1,0 +1,130 @@
+-------------------------------------------------
+run code in spark shell to resolve dependency issue
+
+
+Netcat (nc) is a command-line networking tool used for reading from and writing to network connections using TCP or UDP. It’s often called the Swiss Army knife of networking because it can:
+
+✅ Open TCP/UDP connections
+✅ Act as a server or client
+✅ Send and receive data over a network
+✅ Perform port scanning
+✅ Transfer files
+
+nc -lk 9999
+
+-l → Listen for incoming connections
+
+-k → Keep listening after a connection is closed
+
+9999 → Port number
+
+------------------------------------------------
+root@sel-a1-216-04:/home/te# spark-shell
+Setting default log level to "WARN".
+To adjust logging level use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
+25/03/29 09:46:56 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
+Spark context Web UI available at http://sel-a1-216-04:4040
+Spark context available as 'sc' (master = local[*], app id = local-1743221817267).
+Spark session available as 'spark'.
+Welcome to
+      ____              __
+     / __/__  ___ _____/ /__
+    _\ \/ _ \/ _ `/ __/  '_/
+   /___/ .__/\_,_/_/ /_/\_\   version 3.5.5
+      /_/
+         
+Using Scala version 2.12.18 (OpenJDK 64-Bit Server VM, Java 11.0.26)
+Type in expressions to have them evaluated.
+Type :help for more information.
+
+scala> import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.SparkSession
+
+scala> import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions._
+
+scala> 
+
+scala> object WordCountStreaming {
+     |   def main(args: Array[String]): Unit = {
+     |     val spark = SparkSession.builder
+     |       .appName("StructuredNetworkWordCount")
+     |       .master("local[*]")
+     |       .getOrCreate()
+     | 
+     |     val lines = spark.readStream
+     |       .format("socket")
+     |       .option("host", "localhost")
+     |       .option("port", 9999)
+     |       .load()
+     | 
+     |     import spark.implicits._
+     |     val words = lines.as[String].flatMap(_.split(" "))
+     | 
+     |     val wordCounts = words.groupBy("value").count()
+     | 
+     |     val query = wordCounts.writeStream
+     |       .outputMode("complete")
+     |       .format("console")
+     |       .start()
+     | 
+     |     query.awaitTermination()
+     |   }
+     | }
+defined object WordCountStreaming
+
+scala> WordCountStreaming.main(Array())
+25/03/29 09:47:30 WARN SparkSession: Using an existing Spark session; only runtime SQL configurations will take effect.
+25/03/29 09:47:30 WARN TextSocketSourceProvider: The socket source should not be used for production applications! It does not support recovery.
+25/03/29 09:47:30 WARN ResolveWriteToStream: Temporary checkpoint location created which is deleted normally when the query didn't fail: /tmp/temporary-52c9a561-fc5d-4e42-b91c-22e8cfae7583. If it's required to delete it under any circumstances, please set spark.sql.streaming.forceDeleteTempCheckpointLocation to true. Important to know deleting temp checkpoint folder is best effort.
+25/03/29 09:47:30 WARN ResolveWriteToStream: spark.sql.adaptive.enabled is not supported in streaming DataFrames/Datasets and will be disabled.
+-------------------------------------------                                     
+Batch: 0
+-------------------------------------------
++-----+-----+
+|value|count|
++-----+-----+
++-----+-----+
+
+-------------------------------------------                                     
+Batch: 1
+-------------------------------------------
++--------------------+-----+
+|               value|count|
++--------------------+-----+
+|WordCountStreamin...|    1|
++--------------------+-----+
+
+-------------------------------------------
+Batch: 2
+-------------------------------------------
++--------------------+-----+
+|               value|count|
++--------------------+-----+
+|               hello|    1|
+|WordCountStreamin...|    1|
+|               world|    1|
++--------------------+-----+
+
+-------------------------------------------                                     
+Batch: 3
+-------------------------------------------
++--------------------+-----+
+|               value|count|
++--------------------+-----+
+|               hello|    2|
+|               scala|    1|
+|WordCountStreamin...|    1|
+|               world|    1|
++--------------------+-----+
+
+
+te@sel-a1-216-04:~$ nc -lk 9999
+hello world
+hello Spark
+hello again
+
+WordCountStreaming.main(Array())
+hello world
+hello scala
+
